@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 150 14% 95%; /* #F1F5F3 */
+    --surface: 0 0% 100%; /* #FFFFFF */
+    --surface-2: 150 20% 98%; /* #F8FAF9 */
+    --border: 210 16% 90%; /* #E6E9EB */
+    --foreground: 135 28% 14%; /* #1A2E1F */
+    --muted: 210 20% 96%;
+    --muted-foreground: 142 14% 48%; /* #6B8F78 */
+    --accent: 142 71% 45%; /* #22C55E */
+    --accent-foreground: 0 0% 100%;
+    --primary: 158 67% 26%; /* #166F4E */
+    --primary-foreground: 0 0% 100%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --success: 142 71% 45%;
+    --warning: 38 92% 50%;
+    --error: 0 72% 51%;
+    --info: 214 100% 60%;
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 222 47% 7%; /* #0B0F19 */
+    --surface: 222 47% 11%; /* #111827 */
+    --surface-2: 217 33% 15%; /* #1F2937 */
+    --border: 217 33% 20%; /* #374151 */
+    --foreground: 210 40% 98%; /* #F9FAFB */
+    --muted: 217 33% 17%; /* #1F2937 */
+    --muted-foreground: 215 20.2% 65.1%; /* #9CA3AF */
+    --accent: 158 67% 40%; /* #10B981 */
+    --accent-foreground: 0 0% 100%;
+    --primary: 158 67% 40%; /* #10B981 */
+    --primary-foreground: 0 0% 100%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --success: 142 71% 45%;
+    --warning: 38 92% 50%;
+    --error: 0 72% 51%;
+    --info: 214 100% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  ::-webkit-scrollbar {
+    @apply w-1.5 h-1.5;
+  }
+  ::-webkit-scrollbar-track {
+    background: hsl(var(--background));
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground));
+  }
+}
+
+/* xterm.js overrides */
+.xterm-viewport {
+  background: transparent !important;
+}
+.xterm {
+  padding: 8px;
+}
+
+/* Scrollbar hide utility */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
