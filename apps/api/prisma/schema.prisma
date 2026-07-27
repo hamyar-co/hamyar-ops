@@ -1,0 +1,647 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String     @id @default(uuid())
+  username        String     @unique
+  email           String     @unique
+  passwordHash    String
+  role            Role       @default(VIEWER)
+  totpSecret      String?
+  totpEnabled     Boolean    @default(false)
+  totpBackupCodes String[]   @default([])
+  lastLoginAt     DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  sessions        Session[]
+  auditLogs       AuditLog[]
+  passkeys        Passkey[]
+}
+
+model Passkey {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  credentialId String   @unique
+  publicKey    Bytes
+  counter      Int      @default(0)
+  transports   String[] @default([])
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+}
+
+enum Role {
+  ADMIN
+  VIEWER
+}
+
+model Session {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokenHash String   @unique
+  ipAddress        String?
+  userAgent        String?
+  expiresAt        DateTime
+  createdAt        DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  userId       String?
+  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action       String
+  resourceType String?
+  resourceId   String?
+  metadata     Json?
+  ipAddress    String?
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt(sort: Desc)])
+  @@index([userId])
+  @@index([action])
+}
+
+model AlertRule {
+  id              String        @id @default(uuid())
+  name            String
+  metric          String
+  appName         String?
+  operator        String
+  threshold       Float
+  durationSeconds Int           @default(60)
+  severity        AlertSeverity @default(WARNING)
+  enabled         Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  events          AlertEvent[]
+
+  @@index([appName])
+}
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+model AlertEvent {
+  id          String    @id @default(uuid())
+  ruleId      String
+  rule        AlertRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  triggeredAt DateTime  @default(now())
+  resolvedAt  DateTime?
+  value       Float
+  notified    Boolean   @default(false)
+
+  @@index([triggeredAt(sort: Desc)])
+  @@index([ruleId])
+}
+
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+model AppConfig {
+  id            String        @id @default(cuid())
+  name          String        @unique
+  pm2Name       String        @unique
+  envPath       String?
+  deployPath    String?
+  deployCmd     String?
+  repoUrl       String?
+  branch        String?       @default("main")
+  healthUrl     String?
+  domain        String?
+  webhookSecret String?
+  containerName String?
+  dbType        String?
+  dbName        String?
+  serverId      String?       // optional target ManagedServer
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  versions      AppVersion[]
+  schedules     AppSchedule[]
+  incidents     AppIncident[]
+}
+
+model AppIncident {
+  id          String             @id @default(cuid())
+  appName     String
+  app         AppConfig          @relation(fields: [appName], references: [pm2Name], onDelete: Cascade)
+  status      IncidentStatus     @default(DOWN)
+  title       String
+  description String?
+  startedAt   DateTime           @default(now())
+  resolvedAt  DateTime?
+  durationMs  BigInt?
+  events      AppIncidentEvent[]
+
+  @@index([appName, startedAt(sort: Desc)])
+  @@index([startedAt(sort: Desc)])
+}
+
+model AppIncidentEvent {
+  id         String         @id @default(cuid())
+  incidentId String
+  incident   AppIncident    @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  status     IncidentStatus
+  message    String?
+  recordedAt DateTime       @default(now())
+
+  @@index([incidentId, recordedAt(sort: Desc)])
+}
+
+enum IncidentStatus {
+  UP
+  DOWN
+  DEGRADED
+}
+
+model AppVersion {
+  id         String       @id @default(cuid())
+  appName    String
+  tag        String?
+  commitHash String?
+  commitMsg  String?
+  deployedBy String?
+  status     DeployStatus @default(PENDING)
+  logs       String?
+  startedAt  DateTime     @default(now())
+  finishedAt DateTime?
+  app        AppConfig    @relation(fields: [appName], references: [pm2Name], onDelete: Cascade)
+
+  @@index([appName, startedAt(sort: Desc)])
+}
+
+model AppSchedule {
+  id        String    @id @default(cuid())
+  appName   String
+  cron      String
+  action    String    @default("restart")
+  enabled   Boolean   @default(true)
+  label     String?
+  lastRanAt DateTime?
+  app       AppConfig @relation(fields: [appName], references: [pm2Name], onDelete: Cascade)
+
+  @@index([appName])
+}
+
+model MonitoringSnapshot {
+  id            String   @id @default(cuid())
+  timestamp     DateTime @default(now())
+  totalApps     Int
+  upCount       Int
+  downCount     Int
+  degradedCount Int
+  data          Json?
+
+  @@index([timestamp(sort: Desc)])
+}
+
+enum DeployStatus {
+  PENDING
+  IN_PROGRESS
+  SUCCESS
+  FAILED
+  ROLLED_BACK
+}
+
+model S3Config {
+  id              String           @id @default(cuid())
+  name            String           @unique
+  endpoint        String
+  region          String           @default("default")
+  bucket          String
+  accessKeyId     String
+  secretAccessKey String
+  usePathStyle    Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  strategies      BackupStrategy[]
+}
+
+model BackupStrategy {
+  id                 String         @id @default(cuid())
+  name               String
+  targetType         String
+  targets            String[]       @default([])
+  storage            String         @default("local")
+  s3ConfigId         String?
+  s3Config           S3Config?      @relation(fields: [s3ConfigId], references: [id], onDelete: SetNull)
+  scheduleCron       String
+  retentionMax       Int            @default(24)
+  excludeNodeModules Boolean        @default(true)
+  enabled            Boolean        @default(true)
+  lastRanAt          DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  records            BackupRecord[]
+
+  @@index([s3ConfigId])
+}
+
+model BackupRecord {
+  id         String          @id @default(cuid())
+  strategyId String?
+  strategy   BackupStrategy? @relation(fields: [strategyId], references: [id], onDelete: SetNull)
+  targetType String
+  targetName String
+  storage    String          @default("local")
+  sizeBytes  BigInt          @default(0)
+  fileName   String
+  localPath  String?
+  s3Key      String?
+  status     String          @default("PENDING")
+  message    String?
+  createdAt  DateTime        @default(now())
+  expiresAt  DateTime?
+
+  @@index([targetType, targetName, createdAt(sort: Desc)])
+  @@index([strategyId])
+  @@index([expiresAt])
+}
+
+model NetworkRule {
+  id        String   @id @default(cuid())
+  port      Int
+  protocol  String   @default("tcp")
+  action    String   @default("DENY")
+  enabled   Boolean  @default(true)
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([port, protocol])
+}
+
+model ManagedServer {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  host         String
+  port         Int      @default(22)
+  username     String
+  sshKeyId     String?
+  sshKey       SshKey?  @relation(fields: [sshKeyId], references: [id], onDelete: SetNull)
+  tags         String[] @default([])
+  isActive     Boolean  @default(true)
+  lastPingAt   DateTime?
+  lastPingOk   Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([tags])
+}
+
+model SshKey {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  privateKey  String
+  publicKey   String?
+  passphrase  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  servers     ManagedServer[]
+
+  @@index([name])
+}
+
+// ─── IaC & Fleet Automation ──────────────────────────────────────────────────
+
+model TerraformWorkspace {
+  id           String         @id @default(cuid())
+  name         String         @unique
+  description  String?
+  workingDir   String
+  stateBackend String         @default("s3")
+  s3ConfigId   String?
+  s3Key        String?
+  variables    Json?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  runs         TerraformRun[]
+
+  @@index([name])
+}
+
+model TerraformRun {
+  id          String             @id @default(cuid())
+  workspaceId String
+  workspace   TerraformWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  command     String
+  status      String             @default("PENDING")
+  output      String?
+  planSummary Json?
+  triggeredBy String?
+  startedAt   DateTime           @default(now())
+  finishedAt  DateTime?
+
+  @@index([workspaceId, startedAt(sort: Desc)])
+}
+
+model AnsiblePlaybook {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  description String?
+  content     String
+  targetTags  String[]     @default([])
+  variables   Json?
+  builtIn     Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  jobs        AnsibleJob[]
+
+  @@index([name])
+}
+
+model AnsibleJob {
+  id          String          @id @default(cuid())
+  playbookId  String
+  playbook    AnsiblePlaybook @relation(fields: [playbookId], references: [id], onDelete: Cascade)
+  serverIds   String[]        @default([])
+  status      String          @default("PENDING")
+  output      String?
+  driftReport Json?
+  triggeredBy String?
+  startedAt   DateTime        @default(now())
+  finishedAt  DateTime?
+
+  @@index([playbookId, startedAt(sort: Desc)])
+}
+
+model Pipeline {
+  id           String        @id @default(cuid())
+  name         String        @unique
+  appName      String?
+  serverId     String?
+  trigger      String        @default("manual")
+  webhookToken String?       @unique
+  cron         String?
+  strategy     String        @default("rolling")
+  buildMode    String        @default("ci")
+  registryId   String?
+  imageTag     String?
+  enabled      Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  runs         PipelineRun[]
+
+  @@index([appName])
+  @@index([webhookToken])
+}
+
+model PipelineRun {
+  id         String         @id @default(cuid())
+  pipelineId String
+  pipeline   Pipeline       @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  status     String         @default("PENDING")
+  trigger    String?
+  commitSha  String?
+  branch     String?
+  startedAt  DateTime       @default(now())
+  finishedAt DateTime?
+  steps      PipelineStep[]
+
+  @@index([pipelineId, startedAt(sort: Desc)])
+}
+
+model PipelineStep {
+  id         String      @id @default(cuid())
+  runId      String
+  run        PipelineRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  name       String
+  status     String      @default("PENDING")
+  output     String?
+  startedAt  DateTime    @default(now())
+  finishedAt DateTime?
+
+  @@index([runId])
+}
+
+model ContainerRegistry {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  type      String
+  url       String?
+  username  String?
+  password  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+}
+
+// ─── v1.3.0 Fleet Control & Events ───────────────────────────────────────────
+
+model Event {
+  id          String   @id @default(cuid())
+  type        String   // TERMINAL_CMD|DEPLOY|CRON_RUN|FILE_OP|SERVER_CMD|APP_EVENT|SUPERVISOR|GITHUB_DEPLOY
+  title       String
+  description String?
+  metadata    Json?    // command, output, exitCode, duration, etc
+  serverId    String?
+  serverName  String?  // denormalized for display after server deletion
+  appName     String?
+  userId      String?
+  severity    String   @default("INFO") // INFO|SUCCESS|WARNING|ERROR
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt(sort: Desc)])
+  @@index([type])
+  @@index([serverId])
+  @@index([appName])
+  @@index([userId])
+}
+
+model CronJob {
+  id             String    @id @default(cuid())
+  serverId       String?   // null = ops server (BullMQ repeatable job)
+  title          String
+  command        String
+  cronExpression String
+  enabled        Boolean   @default(true)
+  lastRunAt      DateTime?
+  lastRunOutput  String?
+  lastRunStatus  String?   // SUCCESS|FAILED
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([serverId])
+}
+
+model SupervisorRule {
+  id           String   @id @default(cuid())
+  serverId     String?  // null = ops server
+  appName      String
+  appType      String   // PM2|DOCKER|SYSTEMD
+  autoRestart  Boolean  @default(true)
+  enabled      Boolean  @default(true)
+  lastCheckAt  DateTime?
+  lastStatus   String?  // RUNNING|DOWN|RESTARTED|UNKNOWN
+  restartCount Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([serverId])
+  @@index([enabled])
+}
+
+model UserSshKey {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String   // e.g. "MacBook Pro"
+  publicKey String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model GithubConnection {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  accessToken  String   // AES-256-GCM encrypted
+  githubUserId String
+  githubLogin  String
+  avatarUrl    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// ─── Centralized error-log aggregator (issue #13) ───────────────────────────
+model ErrorLog {
+  id           String   @id @default(cuid())
+  source       String // "pm2" | "nginx" | "system" | "docker"
+  sourceName   String // app/process/container/unit name
+  message      String // normalized error title (first line / short summary)
+  fullLine     String // the full original log line
+  route        String? // extracted HTTP route (for nginx/app access errors)
+  stackSnippet String? // optional short stack/context lines joined
+  timestamp    DateTime
+  fingerprint  String // dedupe key (sourceName + message hash)
+  createdAt    DateTime @default(now())
+
+  @@index([source, sourceName, timestamp(sort: Desc)])
+  @@index([fingerprint])
+  @@index([timestamp(sort: Desc)])
+}
+
+// ─── Analytics ──────────────────────────────────────────────────────────────
+
+model AnalyticsSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+model LogFileState {
+  id         String   @id @default(cuid())
+  filePath   String   @unique
+  byteOffset BigInt   @default(0)
+  updatedAt  DateTime @updatedAt
+}
+
+model RawRequest {
+  id        String   @id @default(cuid())
+  ip        String?
+  method    String?
+  url       String?
+  status    Int?
+  userAgent String?
+  referer   String?
+  size      Int?
+  botScore  Int      @default(0)
+  isBot     Boolean  @default(false)
+  timestamp DateTime
+  createdAt DateTime @default(now())
+
+  @@index([timestamp(sort: Desc)])
+  @@index([isBot])
+}
+
+model AnalyticsMinuteStat {
+  id        String   @id @default(cuid())
+  timestamp DateTime @unique
+  bandwidth BigInt   @default(0)
+  visitors  Int      @default(0)
+  pageViews Int      @default(0)
+  botCount  Int      @default(0)
+  success   Int      @default(0)
+  errors    Int      @default(0)
+}
+
+model AnalyticsHourStat {
+  id        String   @id @default(cuid())
+  timestamp DateTime @unique
+  bandwidth BigInt   @default(0)
+  visitors  Int      @default(0)
+  pageViews Int      @default(0)
+  botCount  Int      @default(0)
+  success   Int      @default(0)
+  errors    Int      @default(0)
+}
+
+model AnalyticsDayStat {
+  id        String   @id @default(cuid())
+  timestamp DateTime @unique
+  bandwidth BigInt   @default(0)
+  visitors  Int      @default(0)
+  pageViews Int      @default(0)
+  botCount  Int      @default(0)
+  success   Int      @default(0)
+  errors    Int      @default(0)
+}
+
+model AnalyticsVisitor {
+  id         String   @id @default(cuid())
+  ip         String   @unique
+  userAgent  String?
+  firstSeen  DateTime
+  lastSeen   DateTime
+  visitCount Int      @default(1)
+  isBot      Boolean  @default(false)
+}
+
+// ─── Microservices & Load Balancing ─────────────────────────────────────────
+
+model MicroserviceProject {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  domain      String?
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  services    Microservice[]
+}
+
+model Microservice {
+  id              String   @id @default(cuid())
+  projectId       String
+  project         MicroserviceProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name            String
+  pm2Prefix       String   @unique
+  deployPath      String?
+  startCmd        String?
+  basePort        Int      @default(3000)
+  targetInstances Int      @default(1)
+  healthUrl       String?
+  routePrefix     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([projectId])
+}
