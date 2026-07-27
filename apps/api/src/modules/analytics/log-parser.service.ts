@@ -13,7 +13,6 @@ export class LogParserService {
   @Cron(CronExpression.EVERY_10_SECONDS)
   async parseLogs() {
     if (!fs.existsSync(this.logFilePath)) {
-      this.logger.warn(`Log file not found: ${this.logFilePath}`);
       return;
     }
 

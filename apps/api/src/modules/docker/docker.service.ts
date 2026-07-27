@@ -77,7 +77,7 @@ export class DockerService implements OnModuleInit, OnModuleDestroy {
 
   async listContainers(): Promise<ContainerDto[]> {
     const containers = await this.docker.listContainers({ all: true });
-    return containers.map(this.mapContainer);
+    return (containers || []).map((c) => this.mapContainer(c));
   }
 
   async inspectContainer(id: string) {
@@ -388,11 +388,11 @@ export class DockerService implements OnModuleInit, OnModuleDestroy {
   private mapContainer(c: Dockerode.ContainerInfo): ContainerDto {
     return {
       id: c.Id.substring(0, 12),
-      name: c.Names[0]?.replace('/', '') ?? '',
+      name: c.Names?.[0]?.replace('/', '') ?? '',
       image: c.Image,
       status: c.Status,
       state: c.State as ContainerDto['state'],
-      ports: c.Ports.map((p) => ({
+      ports: (c.Ports || []).map((p) => ({
         containerPort: p.PrivatePort,
         hostPort: p.PublicPort ?? null,
         protocol: p.Type,
@@ -400,7 +400,7 @@ export class DockerService implements OnModuleInit, OnModuleDestroy {
       created: c.Created,
       labels: c.Labels ?? {},
       networkMode: c.HostConfig?.NetworkMode ?? '',
-      mounts: c.Mounts.map((m) => ({
+      mounts: (c.Mounts || []).map((m) => ({
         type: m.Type ?? '',
         source: m.Source ?? '',
         destination: m.Destination ?? '',

@@ -135,29 +135,38 @@ export class TerminalGateway implements OnGatewayInit, OnGatewayDisconnect {
     }
 
     // SSH shell PTY with a starting working directory (for PM2/static apps).
-    const session = await this.ssh.ptySession(
-      cols,
-      rows,
-      (output) => client.emit(WsEvents.TERMINAL_OUTPUT, { sessionId, data: output }),
-      () => {
-        client.emit(WsEvents.TERMINAL_CLOSED, { sessionId });
-        this.sessions.delete(sessionId);
-        this.sessionOwners.get(client.id)?.delete(sessionId);
-      },
-    );
-    this.sessions.set(sessionId, session);
+    try {
+      const session = await this.ssh.ptySession(
+        cols,
+        rows,
+        (output) => client.emit(WsEvents.TERMINAL_OUTPUT, { sessionId, data: output }),
+        () => {
+          client.emit(WsEvents.TERMINAL_CLOSED, { sessionId });
+          this.sessions.delete(sessionId);
+          this.sessionOwners.get(client.id)?.delete(sessionId);
+        },
+      );
+      this.sessions.set(sessionId, session);
 
-    // cd into the deploy path if provided — sanitize to prevent shell injection
-    if (target?.deployPath) {
-      if (!isSafeAbsolutePath(target.deployPath)) {
-        throw new WsException('Invalid deploy path');
+      // cd into the deploy path if provided — sanitize to prevent shell injection
+      if (target?.deployPath) {
+        if (!isSafeAbsolutePath(target.deployPath)) {
+          throw new WsException('Invalid deploy path');
+        }
+        // Quote path safely for the remote shell
+        const quoted = `'${target.deployPath.replace(/'/g, `'\\''`)}'`;
+        try { session.write(`cd ${quoted} && clear\n`); } catch {}
       }
-      // Quote path safely for the remote shell
-      const quoted = `'${target.deployPath.replace(/'/g, `'\\''`)}'`;
-      try { session.write(`cd ${quoted} && clear\n`); } catch {}
-    }
 
-    return { sessionId };
+      return { sessionId };
+    } catch (err: any) {
+      client.emit(WsEvents.TERMINAL_OUTPUT, {
+        sessionId,
+        data: `\r\n\x1b[31mSSH Connection Error: ${err.message || 'Authentication failed'}\x1b[0m\r\n\x1b[33mEnsure local SSH keys (~/.ssh/id_rsa) or credentials are valid in server settings.\x1b[0m\r\n`,
+      });
+      client.emit(WsEvents.TERMINAL_CLOSED, { sessionId });
+      return { sessionId, error: err.message };
+    }
   }
 
   @SubscribeMessage(WsEvents.TERMINAL_INPUT)
