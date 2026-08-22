@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  traefik:
+    image: traefik:v3.0
+    container_name: traefik_master
+    restart: always
+    command:
+      - "--api.insecure=false"
+      - "--api.dashboard=false" # Disable dashboard unless explicitly secured
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=hamyar_internal_net"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      # Global HTTP to HTTPS redirect
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+      # Let's Encrypt for automatic SSL
+      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+      - "--certificatesresolvers.myresolver.acme.email=admin@hamyar.co"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./letsencrypt:/letsencrypt"
+    networks:
+      - hamyar_internal_net
+
+  ops_api:
+    image: hamyar/ops-api:latest
+    container_name: ops_api
+    restart: always
+    environment:
+      - NODE_ENV=production
+      - JWT_SECRET=${JWT_SECRET}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ops_api.rule=Host(`api.ops.hamyar.co`)"
+      - "traefik.http.routers.ops_api.entrypoints=websecure"
+      - "traefik.http.routers.ops_api.tls.certresolver=myresolver"
+      - "traefik.http.services.ops_api.loadbalancer.server.port=3000"
+    networks:
+      - hamyar_internal_net
+
+  ops_ui:
+    image: hamyar/ops-ui:latest
+    container_name: ops_ui
+    restart: always
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=https://api.ops.hamyar.co
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ops_ui.rule=Host(`ops.hamyar.co`)"
+      - "traefik.http.routers.ops_ui.entrypoints=websecure"
+      - "traefik.http.routers.ops_ui.tls.certresolver=myresolver"
+      - "traefik.http.services.ops_ui.loadbalancer.server.port=3000"
+    networks:
+      - hamyar_internal_net
+
+networks:
+  hamyar_internal_net:
+    external: true

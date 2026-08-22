@@ -1,0 +1,32 @@
+version: '3.8'
+# Hamyar Ops - NestJS Microservice Template
+# Used by ops-api to deploy new microservices securely
+
+services:
+  app:
+    # Path to the cloned/uploaded source code
+    build: 
+      context: ${APP_SOURCE_PATH:-.}
+      dockerfile: Dockerfile
+    container_name: ${APP_NAME}
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      # Injected via ops-ui environment manager
+      ${INJECTED_ENV_VARS}
+    labels:
+      - "traefik.enable=true"
+      # Route traffic matching the assigned domain to this container
+      - "traefik.http.routers.${APP_NAME}.rule=Host(`${APP_DOMAIN}`)"
+      - "traefik.http.routers.${APP_NAME}.entrypoints=websecure"
+      - "traefik.http.routers.${APP_NAME}.tls.certresolver=myresolver"
+      # The internal port the NestJS app runs on (usually 3000)
+      - "traefik.http.services.${APP_NAME}.loadbalancer.server.port=${APP_PORT:-3000}"
+    networks:
+      - isolated_${APP_NAME}_net
+
+networks:
+  isolated_${APP_NAME}_net:
+    driver: bridge
+    # For a Swarm or Multi-node setup using Wireguard, this might be 'overlay'
+    # driver: overlay

@@ -1,0 +1,28 @@
+version: '3.8'
+# Hamyar Ops - Nixpacks Polyglot Template
+# Used by ops-api to deploy new services without explicit Dockerfiles
+
+services:
+  app:
+    # Employs the pre-built image optimized by Nixpacks
+    image: ${NIXPACKS_BUILT_IMAGE}
+    container_name: ${APP_NAME}
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      # Injected via ops-ui environment manager
+      ${INJECTED_ENV_VARS}
+    labels:
+      - "traefik.enable=true"
+      # Route traffic matching the assigned domain to this container
+      - "traefik.http.routers.${APP_NAME}.rule=Host(`${APP_DOMAIN}`)"
+      - "traefik.http.routers.${APP_NAME}.entrypoints=websecure"
+      - "traefik.http.routers.${APP_NAME}.tls.certresolver=myresolver"
+      # The internal port the app exposes
+      - "traefik.http.services.${APP_NAME}.loadbalancer.server.port=${APP_PORT:-3000}"
+    networks:
+      - isolated_${APP_NAME}_net
+
+networks:
+  isolated_${APP_NAME}_net:
+    driver: bridge

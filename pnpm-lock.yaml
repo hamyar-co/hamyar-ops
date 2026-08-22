@@ -24,7 +24,7 @@ importers:
         specifier: ^5.5.4
         version: 5.9.3
 
-  apps/api:
+  apps/ops-api:
     dependencies:
       '@aws-sdk/client-s3':
         specifier: ^3.700.0
@@ -211,7 +211,7 @@ importers:
         specifier: ^5.5.4
         version: 5.9.3
 
-  apps/web:
+  apps/ops-ui:
     dependencies:
       '@hamyar-ops/shared':
         specifier: workspace:*

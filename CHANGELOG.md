@@ -4,6 +4,22 @@ All notable infrastructure, Docker, and DevOps changes will be documented in thi
 
 ---
 
+## [v2.1.0] - 2026-07-27 21:05 (+03:30)
+
+### Added
+- **Storage/Compute Separation**: Divided generic Worker Nodes into isolated `worker-compute` and `worker-storage` servers for performance stability.
+- **Polyglot Build Engine**: Integrated **Nixpacks** into `ops-api` to auto-detect and build Rust, Node, and NestJS projects without requiring explicit Dockerfiles. Added `nixpacks-compose.yml`.
+- **Advanced Security**: Mandated WebAuthn (Passkeys) and TOTP for `ops-ui` administrative access.
+
+## [v2.0.0] - 2026-07-27 20:53 (+03:30)
+
+### Changed
+- **Major Architecture Rewrite**: Transitioned `hamyar-ops` from a generic panel to a specialized, Zero-Trust Master/Worker topology exclusively for Hamyar.
+- **Directory Structure**: Renamed apps to `ops-ui` and `ops-api`, and created `infrastructure/` and `packages/shared/` to enforce strict organization.
+- **Load Balancer**: Introduced Traefik in `infrastructure/master` for dynamic routing, replacing static Nginx configurations.
+- **Security & Networking**: Implemented Zero Trust firewalling via `provision-worker.sh` closing all inbound worker ports except SSH and VPN. Designed isolated Docker bridge/overlay networks per application deployment.
+- **Documentation**: Rewrote `README.md` to document the new architecture, topology, and backend/UI WebSocket integrations.
+
 ## [v1.1.0] - 2026-07-26 14:35 (+03:30)
 
 ### Added
